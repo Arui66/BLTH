@@ -579,8 +579,8 @@
         POPULARITY_REDPOCKET_CHECK_INTERVAL: 10, // 直播红包抽奖检查间隔
         POPULARITY_REDPOCKET_REQUEST_INTERVAL: 500, // 直播红包抽奖请求间隔
         POPULARITY_REDPOCKET_IGNORE_BATTERY: 1.6, // 忽略奖品电池小于__的红包
-        POPULARITY_REDPOCKET_DELAY_MIN: 1000, // 直播红包抽奖延迟最小值
-        POPULARITY_REDPOCKET_DELAY_MAX: 3000, // 直播红包抽奖延迟最大值
+        POPULARITY_REDPOCKET_DELAY_MIN: 25000, // 直播红包抽奖延迟最小值
+        POPULARITY_REDPOCKET_DELAY_MAX: 30000, // 直播红包抽奖延迟最大值
         QUESTIONABLE_LOTTERY: ['test', 'encrypt', '测试', '钓鱼', '加密', '炸鱼', '内网', '员工', '企业', '公司', '行政', '登记'], // 存疑实物抽奖
         REMOVE_ELEMENT_2233: false, // 移除2233
         REMOVE_ELEMENT_pkBanner: true, // 移除大乱斗入口
@@ -1490,7 +1490,7 @@
           POPULARITY_REDPOCKET_LOTTERY: "参与直播红包抽奖。<mh3>注意：</mh3><mul><mli>本功能风险较高，请自行斟酌是否开启。</mli></mul><mh3>原理：</mh3><mul><mli>从热门直播间列表等来源获取直播间数据，每隔一段时间逐一检查这些房间是否有红包抽奖，若有则参与抽奖并建立一个与该房间的webSocket连接以持续获取该房间之后可能出现的红包数据。如果该直播间长时间没有红包抽奖会断开与该房间webSocket连接。</mli></mul>",
           POPULARITY_REDPOCKET_CHECK_INTERVAL: "主动去搜寻红包抽奖的间隔。",
           POPULARITY_REDPOCKET_REQUEST_INTERVAL: "每两个请求之间的间隔时间。<mul><mli>若间隔时间过短可能会被风控。</mli></mul>",
-          POPULARITY_REDPOCKET_DELAY: "参与抽奖前等待一段时间。"
+          POPULARITY_REDPOCKET_DELAY: "参与抽奖前等待一段时间，不建议将值设置的太小，可能会导致请求逾期。"
         };
         const openMainWindow = () => {
           let settingTableoffset = $('.live-player-mounter').offset(),
@@ -6296,7 +6296,13 @@
         draw: async (ruid, roomid, data) => {
           let filterResult = await MY_API.PopularityRedpocketLottery.filter(roomid, data);
           if (!filterResult) return $.Deferred().resolve();
-          await sleep(getRandomNum(MY_API.CONFIG.POPULARITY_REDPOCKET_DELAY_MIN, MY_API.CONFIG.POPULARITY_REDPOCKET_DELAY_MAX));
+          let randomNum = getRandomNum(MY_API.CONFIG.POPULARITY_REDPOCKET_DELAY_MIN, MY_API.CONFIG.POPULARITY_REDPOCKET_DELAY_MAX);
+          let replaceTime = data.replace_time * 1000; // the end time
+          let attendTime = replaceTime - randomNum;
+          let delayTime = attendTime - ts_ms();
+          if(attendTime > replaceTime) delayTime = 0; // execute immediately
+          MYDEBUG(`MY_API.PopularityRedpocketLottery.draw delayTime`, delayTime);
+          await sleep(delayTime);
           await BAPI.xlive.roomEntryAction(roomid).then(re => MYDEBUG(`API.xlive.roomEntryAction(${roomid})`, re));
           return BAPI.xlive.popularityRedPocket.draw(ruid, roomid, data.lot_id).then((response) => {
             MYDEBUG(`API.xlive.popularityRedPocket.draw(ruid = ${ruid}, roomid = ${roomid}, lot_id = ${data.lot_id}, total_price = ${data.total_price}) response`, response);
@@ -6304,7 +6310,7 @@
               MY_API.chatLog(`[红包抽奖] 成功参加红包抽奖<br>roomid = ${linkMsg(liveRoomUrl + roomid, roomid)}, lot_id = ${data.lot_id}<br>奖品总价值：${data.total_price / 1000}电池`, 'success');
               return response;
             } else {
-              MY_API.chatLog(`[红包抽奖] 参加红包红包抽奖失败<br>roomid = ${linkMsg(liveRoomUrl + roomid, roomid)}, lot_id = ${data.lot_id}<br>${response.message}`, 'error');
+              MY_API.chatLog(`[红包抽奖] 参加红包抽奖失败<br>roomid = ${linkMsg(liveRoomUrl + roomid, roomid)}, lot_id = ${data.lot_id}<br>${response.message}`, 'error');
               return false;
             }
           });
@@ -6683,7 +6689,7 @@
    */
   function fixVersionDifferences(API, version) {
     // 添加新的修复后需修改版本号
-    if (versionStringCompare(SP_CONFIG.storageLastFixVersion, "5.7.9") >= 0) return;
+    if (versionStringCompare(SP_CONFIG.storageLastFixVersion, "5.7.10") >= 0) return;
     // 修复变量类型错误
     const configFixList = ['AUTO_GIFT_ROOMID', 'COIN_UID'];
     if (!configFixList.every(i => Array.isArray(API.CONFIG[i]))) {
